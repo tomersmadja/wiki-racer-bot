@@ -1,6 +1,8 @@
 import concurrent.futures
 import multiprocessing
 import queue
+import time
+from datetime import datetime
 
 from geteway.wiki_gateaway import *
 from utils.logger import Logger
@@ -24,31 +26,32 @@ class AsyncConsts:
     # WORKERS = 2
 
 
-class PagesList(list):
+class RankedLinksList(dict):
     def __lt__(self, other):
-        return True
+        return self['rank'] < other['rank']
 
     def __le__(self, other):
-        return True
+        return self['rank'] <= other['rank']
 
     def __gt__(self, other):
-        return True
+        return self['rank'] > other['rank']
 
     def __ge__(self, other):
-        return True
-
-
-class QueuedRankedLinksList(dict)
+        return self['rank'] >= other['rank']
 
 
 class AsyncSearch:
-    def __init__(self, start_page, target_page):
+    def __init__(self, start_page, target_page, use_naive_search=False):
+        """
+        :param start_page: Start page title
+        :param target_page: End page title
+        :param naive_search: While True, the search method doesn't considers categories similarity. False by default
+        """
         self.start_page = start_page
         self.target_page = target_page
         self.target_page_categories = list(WikiGateway().page(self.target_page).categories.keys())
-        self.q = multiprocessing.Queue()
-        # self.q = queue.PriorityQueue()
-        self.keep_searching_flag = True
+        self.q = queue.PriorityQueue() if not use_naive_search else queue.Queue()
+        self.use_naive_search = use_naive_search
 
     def _get_page_rank(self, page):
         categories = page.categories.keys()
@@ -59,34 +62,32 @@ class AsyncSearch:
         return rank
 
     def add_links_to_queue(self, page, parents):
-        links_list = PagesList()
-        for link in page.links.values():
-            if link.namespace == 0:
-                links_list.append(link)
-        self.q.put({'ranked_links_list': (self._get_page_rank(page), links_list), 'parents': parents + [page.title]})
+        ranked_links_list = RankedLinksList({
+            'links': [link for link in page.links.values() if link.namespace == 0],
+            'rank': self._get_page_rank(page) if not self.use_naive_search else 0,
+            'parents': parents + [page.title]
+        })
+        self.q.put(ranked_links_list)
+        logger.info('{} links were added, they are {}\'s children.'
+                    .format(str(len(ranked_links_list['links'])), str(ranked_links_list['parents'])))
 
-# def add_links_to_queue(self, page, parents):
-#         links_list = PagesList()
-#         for link in page.links.values():
-#             if link.namespace == 0:
-#                 links_list.append(link)
-#         self.q.put({'ranked_links_list': (self._get_page_rank(page), links_list), 'parents': parents + [page.title]})
-#
     def run(self):
         self._handle_start_page()
-        while not self.q.empty() and self.keep_searching_flag:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=AsyncConsts.WORKERS) as executor:
-                next_list_in_the_queue = self.q.get()
-                logger.info("Now traversing list with priority of " +
-                            str(next_list_in_the_queue['ranked_links_list'][0]))
-                future_to_page = {executor.submit(check_page, page, self, next_list_in_the_queue['parents']): page
-                                  for page in next_list_in_the_queue['ranked_links_list'][1]}
-                for future in concurrent.futures.as_completed(future_to_page):
-                    if future.result() is not None:
-                        self.keep_searching_flag = False
-                        return future.result()
-                logger.info('There are {} lists of links in the queue'.format(str(self.q.qsize())))
-        print("#####found a path###")
+        while not self.q.empty():
+            result = self._check_pages_list_concurrently()
+            if result:
+                return result
+
+    def _check_pages_list_concurrently(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=AsyncConsts.WORKERS) as executor:
+            next_list_in_the_queue = self.q.get()
+            logger.info("Now traversing list with priority of " + str(abs(next_list_in_the_queue['rank'])))
+            future_to_page = {executor.submit(check_page, page, self, next_list_in_the_queue['parents']): page
+                              for page in next_list_in_the_queue['links']}
+            for future in concurrent.futures.as_completed(future_to_page):
+                if future.result() is not None:
+                    return future.result()
+            logger.info("There are {} lists in the queue".format(str(self.q.qsize())))
 
     def _handle_start_page(self):
         logger.info("Trying to find a path between {} and {}".format(self.start_page, self.target_page))
@@ -95,7 +96,12 @@ class AsyncSearch:
 
 
 if __name__ == "__main__":
-    # s = AsyncSearch('Coronavirus', 'Amino acid transporter')
-    s = AsyncSearch('Grid Compass', 'Mobile operating system')
-    # s = AsyncSearch('Operating system', 'Mobile operating system')
+    s = AsyncSearch('Python', 'Total Film')
+    start = datetime.now()
     print(s.run())
+    print('non-naive search took: ' + str(datetime.now()-start))
+
+    # s = AsyncSearch('Lightning', 'Atlas_(computer)', use_naive_search=True)
+    # start = datetime.now()
+    # print(s.run())
+    # print('naive search took: ' + str(datetime.now()-start))
