@@ -1,6 +1,7 @@
 import wikipediaapi
 
 
+# TODO: Refactor gateway to get only required info- links, title, category
 class WikiGateway:
     def __init__(self):
         pass

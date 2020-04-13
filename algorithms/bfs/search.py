@@ -1,5 +1,4 @@
 import multiprocessing
-import os
 from collections import deque
 
 import time
@@ -8,6 +7,7 @@ from geteway.wiki_gateaway import *
 from utils.logger import Logger
 
 logger = Logger(__name__).get_logger()
+
 
 class AsyncConsts:
     PROCESSES = multiprocessing.cpu_count()
@@ -126,6 +126,7 @@ class AsyncSearch:
 # # s = SyncSearch('Sloth', 'Joseph_Black')
 # s.start_search()
 if __name__ == "__main__":
-    s = AsyncSearch('Sloth', 'Argentina')
+    # s = AsyncSearch('Sloth', 'Argentina')
+    s = AsyncSearch('Coronavirus', 'Amino acid transporter')
     # s = SyncSearch('Sloth', 'Joseph_Black')
     s.start_search()
