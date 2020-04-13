@@ -100,9 +100,8 @@ class AsyncSearch:
             try:
                 page = self.q.get()
                 if self._check_page(page):
+                    print("#####\nPATH FOUND\n####")
                     return True
-                print("q_len is - {}".format(str(self.q.qsize())))
-                print("q  is - {}".format(self.q))
             except Exception as e:
                 logger.error(e)
                 raise e
@@ -121,6 +120,7 @@ class AsyncSearch:
         for p in processes:
             p.join()
         logger.debug(f'Time taken = {time.time() - start_time:.10f}')
+
 
 # s = SyncSearch('Python_(programming_language)', 'Algebraic_structure')
 # # s = SyncSearch('Sloth', 'Joseph_Black')
